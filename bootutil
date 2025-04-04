@@ -1,0 +1,80 @@
+#!/bin/bash
+
+list_entries() {
+    shift 1
+    local entries=()
+
+    for file in "$boot_entry_directory"/*; do
+        [[ -f "$file" ]] || continue
+
+        filename=$(basename "$file")
+        title=$(grep -m1 '^title ' "$file" | cut -d ' ' -f2-)
+        version=$(grep -m1 '^version ' "$file" | cut -d ' ' -f2-)
+        linux=$(grep -m1 '^linux ' "$file" | cut -d ' ' -f2-)
+        sortkey=$(grep -m1 '^sort-key ' "$file" | cut -d ' ' -f2-)
+
+        # ulozime ako: filename--sortkey--output
+        entries+=("$filename--$sortkey--$title ($version, $linux)")
+    done
+
+    if [[ $1 == "-f" ]]; then
+        # printf - kvoli rozdeleniu riadkov
+        IFS=$'\n' sorted=($(printf "%s\n" "${entries[@]}" | sort -t "-" -k1))
+        for entry in "${sorted[@]}"; do
+            echo "${entry##*--}"
+        done
+    elif [[ $1 == "-s" ]]; then
+        IFS=$'\n' sorted=($(printf "%s\n" "${entries[@]}" | sort -t "-" -k2,2 -k1,1))
+        for entry in "${sorted[@]}"; do
+            key="${entry%%--*}"
+            if [[ -n "$key" ]]; then
+                echo "${entry##*--}"
+            fi
+        done
+        for entry in "${sorted[@]}"; do
+            key="${entry%%--*}"
+            if [[ -z "$key" ]]; then
+                echo "${entry##*--}"
+            fi
+        done
+    else
+        for entry in "${entries[@]}"; do
+            echo "${entry##*--}"  # odstráni sortkey a filename
+        done
+    fi
+}
+
+
+if [ $# -lt 1 ]; then
+	echo "Niesu zadane ziadne parametre!" 1>&2
+	exit 1
+fi
+
+# boot_entries_dir
+
+boot_entry_directory="/boot/loader/entries"
+
+if [[ "$1" == -b ]]; then
+	if [[ ! -d "$2" ]]; then
+		echo "cesta neexistuje" 1>&2
+		exit 1
+	fi
+	boot_entry_directory="$2"
+	shift 2
+fi
+
+# hlavne prorozdelenie
+
+case "$1" in
+    "list")
+        list_entries $@
+        ;;
+    *)
+        echo "Použitie: $1 {list}"
+        exit 1
+        ;;
+esac
+
+
+
+exit 0;
