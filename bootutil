@@ -52,6 +52,18 @@ list_entries() {
         shift 1
 
     elif [[ $1 == "-k" ]]; then
+        
+        regex=""
+        shift
+
+        while [[ $# -gt 0 ]]; do
+            regex+="$1 "    
+            shift
+        done
+
+        # odstrani poslednu medzeru
+        regex="${regex% }"  
+
         for file in "$boot_entry_directory"/*; do
             [[ -f "$file" ]] || continue
 
@@ -59,7 +71,7 @@ list_entries() {
             version=$(grep -m1 '^version ' "$file" | cut -d ' ' -f2-)
             linux=$(grep -m1 '^linux ' "$file" | cut -d ' ' -f2-)
 
-            if [[ $2 == "$linux" ]]; then
+            if [[ "$linux" =~ $regex ]]; then
                 echo "$title ($version, $linux)"
             fi
         done
@@ -67,16 +79,26 @@ list_entries() {
         shift 2
     
     elif [[ $1 == "-t" ]]; then
+        
+        regex=""
+        shift
+
+        while [[ $# -gt 0 ]]; do
+            regex+="$1 "    
+            shift
+        done
+
+        # odstrani poslednu medzeru
+        regex="${regex% }"  
+
         for file in "$boot_entry_directory"/*; do
             [[ -f "$file" ]] || continue
 
             title=$(grep -m1 '^title ' "$file" | cut -d ' ' -f2-)
             version=$(grep -m1 '^version ' "$file" | cut -d ' ' -f2-)
             linux=$(grep -m1 '^linux ' "$file" | cut -d ' ' -f2-)
-            echo "$title"
-            echo "$2"
-            echo "$#"
-            if [[ $2 == "$title" ]]; then
+
+            if [[ "$title" =~ $regex ]]; then
                 echo "$title ($version, $linux)"
             fi
         done
