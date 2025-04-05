@@ -14,102 +14,91 @@ list_entries() {
         sortkey=$(grep -m1 '^sort-key ' "$file" | cut -d ' ' -f2-)
 
         # ulozime ako: filename||sortkey||output
-        entries+=("$filename||$sortkey||$title ($version, $linux)")
+        entries+=("$filename||$sortkey||$title ($version, $linux)\n")
     done
 
-    if [[ $1 == "-f" ]]; then
-        # printf - kvoli rozdeleniu riadkov
-        IFS=$'\n' sorted=($(printf "%s\n" "${entries[@]}" | sort -t '|' -k1))
 
-        for entry in "${sorted[@]}"; do
-            echo "${entry##*||}"
-        done
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            "-f")
+                # printf - kvoli rozdeleniu riadkov
+                IFS=$'\n' entries=($(printf "%s\n" "${entries[@]}" | sort -t '|' -k1))
+                shift 1
+                ;;
+            "-s")
+                IFS=$'\n' entries=($(printf "%s\n" "${entries[@]}" | sort -t '|' -k2 -k1))
+                shift 1
+                ;;
+            "-k")
+                regex=""
+                shift 1
 
-        shift 1
+                while [[ $# -gt 0 ]]; do
+                    if [[ "$1" =~ ^- ]]; then
+                        break
+                    fi
 
-    elif [[ $1 == "-s" ]]; then
-        IFS=$'\n' sorted=($(printf "%s\n" "${entries[@]}" | sort -t '|' -k2 -k1))
+                    regex+="$1 "    
+                    shift
+                done
 
-        for entry in "${sorted[@]}"; do
-            # odstranime vsetko pred a po, vratane "||"
-            middle="${entry#*||}"
-            middle="${middle%%||*}"
+                # odstrani poslednu medzeru
+                regex="${regex% }"  
 
-            if [[ -n "$middle" ]]; then
-                echo "${entry##*||}"
-            fi
-        done
-        for entry in "${sorted[@]}"; do
+                for i in "${!entries[@]}"; do
 
-            middle="${entry#*||}"
-            middle="${middle%%||*}"
+                    entry="${entries[$i]}"
 
-            if [[ -z "$middle" ]]; then
-                echo "${entry##*||}"
-            fi
-        done
+                    linux_part="${entry##*(}"        # odstráni všetko pred poslednou zátvorkou (
+                    linux_part="${linux_part%%)}"    # odstráni všetko za poslednou zátvorkou )
+                    linux="${linux_part##*, }"       # vezme len časť za čiarkou (linux)
 
-        shift 1
+                    if [[ ! "$linux" =~ $regex ]]; then
+                        unset 'entries[i]'
+                    fi 
+                done
+                ;;
+            "-t")
+                regex=""
+                shift 1
 
-    elif [[ $1 == "-k" ]]; then
-        
-        regex=""
-        shift
+                while [[ $# -gt 0 ]]; do
+                    if [[ "$1" =~ ^- ]]; then
+                        break
+                    fi
 
-        while [[ $# -gt 0 ]]; do
-            regex+="$1 "    
-            shift
-        done
+                    regex+="$1 "    
+                    shift
+                done
 
-        # odstrani poslednu medzeru
-        regex="${regex% }"  
+                # odstrani poslednu medzeru
+                regex="${regex% }"  
 
-        for file in "$boot_entry_directory"/*; do
-            [[ -f "$file" ]] || continue
+                for i in "${!entries[@]}"; do
 
-            title=$(grep -m1 '^title ' "$file" | cut -d ' ' -f2-)
-            version=$(grep -m1 '^version ' "$file" | cut -d ' ' -f2-)
-            linux=$(grep -m1 '^linux ' "$file" | cut -d ' ' -f2-)
+                    entry="${entries[$i]}"
 
-            if [[ "$linux" =~ $regex ]]; then
-                echo "$title ($version, $linux)"
-            fi
-        done
+                    # Odstráni prefix po treťom "||"
+                    after_third="${entry#*||*||}"
 
-        shift 2
-    
-    elif [[ $1 == "-t" ]]; then
-        
-        regex=""
-        shift
+                    # Odstráni zvyšok od zátvorky
+                    title="${after_third%% *}"
 
-        while [[ $# -gt 0 ]]; do
-            regex+="$1 "    
-            shift
-        done
+                    if [[ ! "$title" =~ $regex ]]; then
+                        unset 'entries[i]'
+                    fi 
+                done
+                ;;
+            *)
+                echo "Použitie: $1 {list}"
+                exit 1
+                ;;
+        esac
+    done
 
-        # odstrani poslednu medzeru
-        regex="${regex% }"  
-
-        for file in "$boot_entry_directory"/*; do
-            [[ -f "$file" ]] || continue
-
-            title=$(grep -m1 '^title ' "$file" | cut -d ' ' -f2-)
-            version=$(grep -m1 '^version ' "$file" | cut -d ' ' -f2-)
-            linux=$(grep -m1 '^linux ' "$file" | cut -d ' ' -f2-)
-
-            if [[ "$title" =~ $regex ]]; then
-                echo "$title ($version, $linux)"
-            fi
-        done
-
-        shift 2
-
-    else
-        for entry in "${entries[@]}"; do
-            echo "${entry##*||}"  # odstráni sortkey a filename
-        done
-    fi
+    for entry in "${entries[@]}"; do
+        echo "${entry##*||}"
+    done
 }
 
 
