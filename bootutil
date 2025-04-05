@@ -14,7 +14,7 @@ list_entries() {
         sortkey=$(grep -m1 '^sort-key ' "$file" | cut -d ' ' -f2-)
 
         # ulozime ako: filename||sortkey||output
-        entries+=("$filename||$sortkey||$title ($version, $linux)\n")
+        entries+=("$filename||$sortkey||$title ($version, $linux)")
     done
 
 
@@ -75,14 +75,15 @@ list_entries() {
                 regex="${regex% }"  
 
                 for i in "${!entries[@]}"; do
-
+                    
                     entry="${entries[$i]}"
 
                     # Odstráni prefix po treťom "||"
                     after_third="${entry#*||*||}"
-
                     # Odstráni zvyšok od zátvorky
-                    title="${after_third%% *}"
+                    title="${after_third%%(*}"
+                    # odstrani medzeru na konci
+                    title="${title% }" 
 
                     if [[ ! "$title" =~ $regex ]]; then
                         unset 'entries[i]'
