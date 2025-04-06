@@ -129,27 +129,17 @@ remove_entries() {
 
 duplicate_entry() {
 
-    # Parsovanie posledných výskytov argumentov
     local kernel_path="" initramfs_path="" new_title=""
     local add_args="" remove_args=""
     local destination="" make_default_flag=0
 
     while [[ $# -gt 0 ]]; do
-        #echo "cyklus stuck: $1"
+    
         case "$1" in
             "-k")
                 shift
-
-                kernel_path=""
-
-                while [[ $# -gt 0 ]]; do
-                    if [[ "$1" =~ ^- ]]; then
-                        break
-                    fi
-                    kernel_path+="$1 "    
-                    shift
-                done
-                kernel_path="${kernel_path% }" 
+                kernel_path="$1"
+                shift
                 ;;
             "-i")
                 shift
@@ -161,7 +151,7 @@ duplicate_entry() {
                 new_title=""
                 echo "jes"
                 while [[ $# -gt 0 ]]; do
-                    if [[ "$1" =~ ^- ]]; then
+                    if [[ $1 == [-/]* ]]; then
                         break
                     fi
                     echo "pouzivam: $1"
@@ -200,9 +190,10 @@ duplicate_entry() {
 
                 # odchyt cesty
                 while [[ $# -gt 0 ]]; do
-                    if [[ "$1" =~ ^- ]]; then
+                    if [[ $1 == [-]* ]]; then
                         break
                     fi
+                    echo "next je: $1"
                     path+="$1 "    
                     shift
                 done
@@ -212,6 +203,17 @@ duplicate_entry() {
                 ;;
         esac
     done
+
+    echo "path: $path"
+
+    if [[ ! -n "$path" ]]; then
+        path=$(show_default "-f")
+        if [[ ! -n "$path" ]]; then
+            echo "Nebol zadany ani default ani entry file." &1>2
+            exit 1
+        fi
+        echo "$path"
+    fi
 
     local content
     content=$(<"$path")
@@ -296,13 +298,11 @@ show_default() {
             else
                 cat "$file"
             fi
-            return 0
+            break
         fi
     done
 
-    return 1  # ak nič nenájdeme, návratový kód != 0
 }
-
 
 make_default() {
     path=""
@@ -324,8 +324,13 @@ make_default() {
     for file in "$dir"/*; do
         sed -i 's/^vutfit_default .*/vutfit_default n/' "$file"
     done
-    # V cieľovom nastavíme na y
-    sed -i 's/^vutfit_default .*/vutfit_default y/' "$path"
+
+    # nastavime y
+    if grep -q '^vutfit_default ' "$path"; then
+            sed -i 's/^vutfit_default .*/vutfit_default y/' "$path"
+        else
+            sed -i '1i\vutfit_default y' "$path"
+        fi
 }
 
 
