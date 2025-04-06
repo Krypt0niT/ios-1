@@ -102,6 +102,31 @@ list_entries() {
     done
 }
 
+remove_entries() {
+
+    regex=""
+
+    while [[ $# -gt 0 ]]; do
+        regex+="$1 "    
+        shift
+    done
+
+    # odstrani poslednu medzeru
+    regex="${regex% }"  
+
+    for file in "$boot_entry_directory"/*; do
+        [[ -f "$file" ]] || continue
+
+        title=$(grep -m1 '^title ' "$file" | cut -d ' ' -f2-)
+
+        echo "vypis :OOOOOOOO"
+        if [[ "$title" =~ $regex ]]; then
+            echo "removing: $file"
+            rm "$file"
+        fi 
+    done
+}
+
 
 if [ $# -lt 1 ]; then
 	echo "Niesu zadane ziadne parametre!" 1>&2
@@ -128,12 +153,14 @@ case "$1" in
         shift 1
         list_entries $@
         ;;
+    "remove")
+        shift 1
+        remove_entries $@
+        ;;
     *)
         echo "Použitie: $1 {list}"
         exit 1
         ;;
 esac
-
-
 
 exit 0;
