@@ -127,6 +127,207 @@ remove_entries() {
     done
 }
 
+duplicate_entry() {
+
+    # Parsovanie posledných výskytov argumentov
+    local kernel_path="" initramfs_path="" new_title=""
+    local add_args="" remove_args=""
+    local destination="" make_default_flag=0
+
+    while [[ $# -gt 0 ]]; do
+        #echo "cyklus stuck: $1"
+        case "$1" in
+            "-k")
+                shift
+
+                kernel_path=""
+
+                while [[ $# -gt 0 ]]; do
+                    if [[ "$1" =~ ^- ]]; then
+                        break
+                    fi
+                    kernel_path+="$1 "    
+                    shift
+                done
+                kernel_path="${kernel_path% }" 
+                ;;
+            "-i")
+                shift
+                initramfs_path="$1"
+                shift
+                ;;
+            "-t")
+                shift
+                new_title=""
+                echo "jes"
+                while [[ $# -gt 0 ]]; do
+                    if [[ "$1" =~ ^- ]]; then
+                        break
+                    fi
+                    echo "pouzivam: $1"
+                    new_title+="$1 "    
+                    shift
+                done
+                new_title="${new_title% }" 
+                ;;
+            "-a")
+                shift
+                param="$1"
+
+                # Only add to operations if not already added
+                if ! [[ " ${added_params[*]} " =~ " ${param} " ]]; then
+                    operations+=("add:${param}")
+                    added_params+=("${param}")
+                    shift
+                fi
+                ;;
+            "-r")
+                shift
+                operations+=("remove:$1")
+                shift
+                ;;
+            "-d")
+                shift
+                destination="$1"
+                shift
+                ;;
+            "--make-default")
+                shift
+                make_default_flag=1
+                ;;
+            *)
+                path=""
+
+                # odchyt cesty
+                while [[ $# -gt 0 ]]; do
+                    if [[ "$1" =~ ^- ]]; then
+                        break
+                    fi
+                    path+="$1 "    
+                    shift
+                done
+
+                # odstrani poslednu medzeru
+                path="${path% }" 
+                ;;
+        esac
+    done
+
+    local content
+    content=$(<"$path")
+
+    # Úprava obsahu
+    [[ -n "$kernel_path" ]]     && content=$(echo "$content" | sed -E "s|^linux\s+.*|linux $kernel_path|")
+    [[ -n "$initramfs_path" ]]  && content=$(echo "$content" | sed -E "s|^initrd\s+.*|initrd $initramfs_path|")
+    [[ -n "$new_title" ]] && content=$(sed -E "s|^[[:space:]]*title[[:space:]]+.*|title $new_title|" <<< "$content")
+
+    # -a & -r
+    if grep -q "^options" <<< "$content"; then
+        options_line=$(grep "^options" <<< "$content")
+        content=$(grep -v "^options" <<< "$content")
+    else
+        options_line="options"
+    fi
+
+    # Process operations in order
+    for op in "${operations[@]}"; do
+        type="${op%%:*}"
+        arg="${op#*:}"
+        
+        if [[ "$type" == "add" ]]; then
+            if ! [[ "$options_line" =~ (^|\s)"$arg"($|\s) ]]; then
+                options_line="$options_line $arg"
+            fi
+        elif [[ "$type" == "remove" ]]; then
+            options_line=$(sed -E "s/\s*\b${arg}\b\s*/ /g" <<< "$options_line")
+        fi
+    done
+    
+    options_line=$(echo "$options_line" | sed -E 's/\s+/ /g')
+    if [[ "$options_line" != "options" ]]; then
+        content="$content"$'\n'"$options_line"
+    fi
+
+    # Nastavenie default
+    if [[ "$make_default_flag" -eq 1 ]]; then
+        make_default $path
+    fi
+    
+    cleaned_content="$(echo "$content" | sed -E 's/[[:space:]]+$//' )"
+
+    # Výstupný súbor
+    if [[ -n "$destination" ]]; then
+        echo "$cleaned_content" > "$destination"
+        echo "$cleaned_content"
+    else
+        # Generuj unikátne meno
+        base_name=$(basename "$path" .conf)
+        for i in {1..999}; do
+            try="$boot_entry_directory/${base_name}.copy${i}.conf"
+            #try="$boot_entry_directory/${base_name}.copy.conf"
+            if [[ ! -e "$try" ]]; then
+                destination="$try"
+                echo "$cleaned_content" > "$destination"
+                break
+            fi
+        done
+        if [[ -z "$destination" ]]; then
+            echo "Error: Could not find unique filename for duplicated entry." >&2
+            exit 1
+        fi
+    fi
+
+    echo "Duplicated entry saved to '$destination'"
+}
+
+show_default() {
+    local only_path=false
+
+    # Odchytíme príznak -f
+    if [[ "$1" == "-f" ]]; then
+        only_path=true
+    fi
+
+    for file in "$boot_entry_directory"/*; do
+        [[ -f "$file" ]] || continue
+        if grep -q '^vutfit_default y' "$file"; then
+            if $only_path; then
+                echo "$file"
+            else
+                cat "$file"
+            fi
+            return 0
+        fi
+    done
+
+    return 1  # ak nič nenájdeme, návratový kód != 0
+}
+
+
+make_default() {
+    path=""
+
+    while [[ $# -gt 0 ]]; do
+        path+="$1 "    
+        shift
+    done
+
+    path="${path% }" 
+
+    if [[ ! -f "$path" ]]; then
+        echo "Súbor neexistuje: $path" >&2 
+        exit 1
+    fi
+
+    dir=$(dirname "$path")
+
+    for file in "$dir"/*; do
+        sed -i 's/^vutfit_default .*/vutfit_default n/' "$file"
+    done
+    # V cieľovom nastavíme na y
+    sed -i 's/^vutfit_default .*/vutfit_default y/' "$path"
+}
+
 
 if [ $# -lt 1 ]; then
 	echo "Niesu zadane ziadne parametre!" 1>&2
@@ -157,8 +358,20 @@ case "$1" in
         shift 1
         remove_entries $@
         ;;
+    "duplicate")
+        shift
+        duplicate_entry $@
+        ;;
+    "show-default")
+        shift 1
+        show_default $@
+        ;;
+    "make-default")
+        shift 1
+        make_default $@
+        ;;
     *)
-        echo "Použitie: $1 {list}"
+        echo "Použitie neznámeho argumentu: $1"
         exit 1
         ;;
 esac
